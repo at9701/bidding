@@ -226,7 +226,7 @@ function renderSetup() {
 }
 
 function renderLogin() {
-  return '<div class="center-box"><div class="center-card"><div style="font-size:36px;margin-bottom:8px">⚔️</div><h1 style="color:var(--gold);font-size:20px;margin-bottom:24px;letter-spacing:2px">輸入角色名稱</h1><input id="login-name" placeholder="你的角色名" style="margin-bottom:12px" onkeydown="if(event.key===\'Enter\'){var n=this.value.trim();if(n)setUser(n)}"><button class="btn btn-gold" style="width:100%" onclick="var n=document.getElementById(\'login-name\').value.trim();if(n)setUser(n)">進入競標所</button></div></div>';
+  return '<div class="center-box"><div class="center-card"><div style="font-size:36px;margin-bottom:8px">⚔️</div><h1 style="color:var(--gold);font-size:20px;margin-bottom:24px;letter-spacing:2px">輸入角色名稱</h1><input id="login-name" placeholder="請輸入血盟-職業-腳色名稱" style="margin-bottom:12px" onkeydown="if(event.key===\'Enter\'){var n=this.value.trim();if(n)setUser(n)}"><button class="btn btn-gold" style="width:100%" onclick="var n=document.getElementById(\'login-name\').value.trim();if(n)setUser(n)">進入競標所</button></div></div>';
 }
 
 function renderAuctionList() {
