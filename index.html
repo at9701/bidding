@@ -107,12 +107,14 @@ function fmtT(ms) {
 function showMsg(m) { S.msg = m; render(); clearTimeout(msgTimer); msgTimer = setTimeout(() => { S.msg = ""; render(); }, 3000); }
 function $(id) { return document.getElementById(id); }
 
+function isTyping(){ var a=document.activeElement; return a&&(a.tagName==="INPUT"||a.tagName==="SELECT"||a.tagName==="TEXTAREA"); }
+
 // ── Poll ──
 function startPoll() {
   stopPoll();
   poll();
   pollTimer = setInterval(poll, 5000);
-  tickTimer = setInterval(function(){ if(S.view==="list"||S.view==="detail") render(); }, 1000);
+  tickTimer = setInterval(function(){ if(!isTyping()) render(); }, 1000);
 }
 function stopPoll() { clearInterval(pollTimer); clearInterval(tickTimer); }
 
@@ -130,7 +132,7 @@ async function poll() {
   }
   const m = await apiGet("market");
   if (!m.error && Array.isArray(m)) S.market = m;
-  if (S.view === "list" || S.view === "detail") render();
+  if (!isTyping()) render();
 }
 
 // ── Actions ──
@@ -263,7 +265,7 @@ function renderACard(a, now, ended) {
 }
 
 function renderCreateAuction() {
-  return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:20px"><button class="back-btn" onclick="goList()">←</button><span style="color:var(--gold);font-weight:700;font-size:16px">發起競標</span></div><div class="card" style="padding:20px"><div style="margin-bottom:14px"><label class="label">物品名稱</label><input id="ca-name" placeholder="例：祝福強化卷軸"></div><div class="grid-2" style="margin-bottom:14px"><div><label class="label">底價</label><input id="ca-price" type="number" placeholder="0"></div><div><label class="label">每口加價</label><input id="ca-inc" type="number" placeholder="100"></div></div><label class="label">競標時限</label><div style="display:flex;gap:8px;margin-bottom:20px"><input id="ca-dur" type="number" value="30" style="flex:1"><select id="ca-unit" style="flex:0 0 80px;cursor:pointer"><option value="min">分鐘</option><option value="hr">小時</option><option value="day">天</option></select></div><button id="ca-submit" class="btn btn-gold" style="width:100%" onclick="createAuction(event)">🔨 發起競標</button></div>';
+  return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:20px"><button class="back-btn" onclick="goList()">←</button><span style="color:var(--gold);font-weight:700;font-size:16px">發起競標</span></div><div class="card" style="padding:20px"><div style="margin-bottom:14px"><label class="label">物品名稱</label><input id="ca-name" placeholder="例：祝福強化卷軸"></div><div class="grid-2" style="margin-bottom:14px"><div><label class="label">底價</label><input id="ca-price" type="number" placeholder="0"></div><div><label class="label">每次加價</label><input id="ca-inc" type="number" placeholder="100"></div></div><label class="label">競標時限</label><div style="display:flex;gap:8px;margin-bottom:20px"><input id="ca-dur" type="number" value="30" style="flex:1"><select id="ca-unit" style="flex:0 0 80px;cursor:pointer"><option value="min">分鐘</option><option value="hr">小時</option><option value="day">天</option></select></div><button id="ca-submit" class="btn btn-gold" style="width:100%" onclick="createAuction(event)">🔨 發起競標</button></div>';
 }
 
 function renderDetail() {
@@ -284,11 +286,11 @@ function renderDetail() {
   h += '<div class="status-badge" style="background:' + (ended ? 'var(--border)' : (urgent ? 'rgba(192,57,43,.13)' : 'rgba(39,174,96,.13)')) + ';color:' + (ended ? 'var(--dim)' : urgent ? 'var(--red)' : 'var(--green)') + '">⏱ ' + fmtT(rem) + '</div></div>';
 
   // info
-  h += '<div class="card grid-3" style="padding:12px 16px;margin-bottom:12px"><div><span style="color:var(--dim)">發起者</span><div style="margin-top:3px">' + esc(a.creator) + '</div></div><div><span style="color:var(--dim)">底價</span><div style="margin-top:3px">' + fmtP(a.startPrice) + '</div></div><div><span style="color:var(--dim)">每口</span><div style="margin-top:3px">+' + fmtP(a.increment) + '</div></div></div>';
+  h += '<div class="card grid-3" style="padding:12px 16px;margin-bottom:12px"><div><span style="color:var(--dim)">發起者</span><div style="margin-top:3px">' + esc(a.creator) + '</div></div><div><span style="color:var(--dim)">底價</span><div style="margin-top:3px">' + fmtP(a.startPrice) + '</div></div><div><span style="color:var(--dim)">每次加價</span><div style="margin-top:3px">+' + fmtP(a.increment) + '</div></div></div>';
 
   // bid controls
   if (!ended) {
-    h += '<div class="card" style="margin-bottom:12px"><div style="font-size:11px;color:var(--dim);margin-bottom:8px">出價（最低 ' + fmtP(nextBid) + '）</div><div style="display:flex;gap:8px;margin-bottom:8px"><button class="btn btn-gold" style="flex:1" onclick="placeBid(' + nextBid + ')">' + fmtP(nextBid) + '</button><button class="btn btn-dim" style="flex:1" onclick="placeBid(' + (nextBid + a.increment) + ')">+2口 ' + fmtP(nextBid + a.increment) + '</button></div><div style="display:flex;gap:8px"><input id="custom-bid" type="number" placeholder="自訂金額" style="flex:1"><button class="btn btn-green" onclick="var v=parseInt(document.getElementById(\'custom-bid\').value);if(v>=' + nextBid + ')placeBid(v);else alert(\'最低出價 ' + fmtP(nextBid) + '\')">出價</button></div></div>';
+    h += '<div class="card" style="margin-bottom:12px"><div style="font-size:11px;color:var(--dim);margin-bottom:8px">出價（最低 ' + fmtP(nextBid) + '）</div><div style="display:flex;gap:8px;margin-bottom:8px"><button class="btn btn-gold" style="flex:1" onclick="placeBid(' + nextBid + ')">出價 ' + fmtP(nextBid) + '</button><button class="btn btn-dim" style="flex:1" onclick="placeBid(' + (nextBid + a.increment) + ')">加兩次 ' + fmtP(nextBid + a.increment) + '</button></div><div style="display:flex;gap:8px"><input id="custom-bid" type="number" placeholder="自訂金額" style="flex:1"><button class="btn btn-green" onclick="var v=parseInt(document.getElementById(\'custom-bid\').value);if(v>=' + nextBid + ')placeBid(v);else alert(\'最低出價 ' + fmtP(nextBid) + '\')">出價</button></div></div>';
   }
 
   // winner
