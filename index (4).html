@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>寶物競標所</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚔️</text></svg>">
+<link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoi5a+256mp56u25qiZ5omAIiwic2hvcnRfbmFtZSI6IuertuaomSIsInN0YXJ0X3VybCI6Ii4vIiwiZGlzcGxheSI6InN0YW5kYWxvbmUiLCJiYWNrZ3JvdW5kX2NvbG9yIjoiIzBiMGYxYSIsInRoZW1lX2NvbG9yIjoiI2Q0YTg0MyJ9">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0b0f1a;--card:#141b2d;--gold:#d4a843;--gold-dim:#a07830;--red:#c0392b;--green:#27ae60;--text:#e0d6c2;--dim:#8a8270;--border:#2a3050;--input:#0f1525}
+body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC','Segoe UI','PingFang TC',sans-serif;min-height:100vh;-webkit-tap-highlight-color:transparent}
+input,select,button{font-family:inherit}
+input,select{width:100%;padding:10px 12px;background:var(--input);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:14px;outline:none}
+input:focus{border-color:var(--gold)}
+.btn{padding:10px 18px;border:none;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:1px}
+.btn-gold{background:var(--gold);color:var(--bg)}
+.btn-gold:disabled{background:var(--border);cursor:default}
+.btn-dim{background:var(--gold-dim);color:var(--bg)}
+.btn-green{background:var(--green);color:#fff}
+.btn-green:disabled{background:var(--border);cursor:default}
+.card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:16px}
+.header{background:var(--card);border-bottom:1px solid var(--border);padding:10px 16px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:10}
+.header-title{color:var(--gold);font-weight:700;font-size:16px;cursor:pointer}
+.small-btn{background:none;border:1px solid var(--border);color:var(--dim);padding:3px 8px;border-radius:4px;font-size:11px;cursor:pointer}
+.label{color:var(--dim);font-size:11px;display:block;margin-bottom:5px;letter-spacing:.5px}
+.center-box{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.center-card{background:var(--card);border:1px solid var(--gold);border-radius:8px;padding:40px 32px;max-width:400px;width:100%;text-align:center}
+.container{max-width:640px;margin:0 auto;padding:16px 14px}
+.tabs{display:flex;border-bottom:1px solid var(--border);background:var(--card)}
+.tab-btn{flex:1;padding:10px 0;background:none;border:none;border-bottom:2px solid transparent;color:var(--dim);font-size:14px;font-weight:600;cursor:pointer}
+.tab-btn.active{color:var(--gold);border-bottom-color:var(--gold)}
+.toast{position:fixed;top:60px;left:50%;transform:translateX(-50%);background:var(--green);color:#fff;padding:8px 20px;border-radius:6px;font-size:13px;z-index:100;white-space:nowrap}
+.auction-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;margin-bottom:8px;cursor:pointer;display:flex;justify-content:space-between}
+.auction-card.urgent{border-color:var(--red)}
+.auction-card.ended{opacity:.7}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:11px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.bid-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;font-size:12px}
+.bid-row+.bid-row{border-top:1px solid var(--border)}
+.market-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;margin-bottom:8px}
+.flex-between{display:flex;justify-content:space-between;align-items:flex-start}
+.back-btn{background:none;border:none;color:var(--dim);font-size:20px;cursor:pointer;padding:0}
+.del-btn{background:none;border:1px solid var(--red);color:var(--red);padding:3px 10px;border-radius:4px;font-size:11px;cursor:pointer}
+.status-badge{display:inline-block;padding:5px 14px;border-radius:16px;font-size:12px;font-weight:600;margin-top:10px}
+@media(max-width:400px){.grid-2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+// ── State ──
+const S = {
+  apiUrl: localStorage.getItem("auc_api") || "",
+  username: localStorage.getItem("auc_user") || "",
+  tab: "auction",
+  view: "list",
+  auctions: [],
+  market: [],
+  detail: null,
+  selectedId: null,
+  loading: false,
+  msg: "",
+  prevBids: {}
+};
+
+let pollTimer = null;
+let tickTimer = null;
+let msgTimer = null;
+
+// ── API ──
+async function apiGet(action, params) {
+  try {
+    let url = S.apiUrl + "?action=" + action;
+    if (params) url += "&" + new URLSearchParams(params);
+    const r = await fetch(url);
+    return await r.json();
+  } catch (e) { return { error: e.message }; }
+}
+async function apiPost(body) {
+  try {
+    const r = await fetch(S.apiUrl, { method: "POST", body: JSON.stringify(body), headers: { "Content-Type": "text/plain" } });
+    return await r.json();
+  } catch (e) { return { error: e.message }; }
+}
+
+// ── Notify ──
+function reqNotify() { if ("Notification" in window && Notification.permission === "default") Notification.requestPermission(); }
+function notify(title, body) { if ("Notification" in window && Notification.permission === "granted") new Notification(title, { body }); }
+
+// ── Helpers ──
+const fmtP = n => Number(n).toLocaleString();
+function fmtT(ms) {
+  if (ms <= 0) return "已結標";
+  const s = Math.floor(ms / 1000), d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  if (d > 0) return d + "天" + h + "時" + m + "分";
+  if (h > 0) return h + "時" + m + "分" + sec + "秒";
+  return m + "分" + sec + "秒";
+}
+function showMsg(m) { S.msg = m; render(); clearTimeout(msgTimer); msgTimer = setTimeout(() => { S.msg = ""; render(); }, 3000); }
+function $(id) { return document.getElementById(id); }
+
+// ── Poll ──
+function startPoll() {
+  stopPoll();
+  poll();
+  pollTimer = setInterval(poll, 5000);
+  tickTimer = setInterval(render, 1000);
+}
+function stopPoll() { clearInterval(pollTimer); clearInterval(tickTimer); }
+
+async function poll() {
+  const a = await apiGet("list");
+  if (!a.error && Array.isArray(a)) {
+    a.forEach(auction => {
+      const prev = S.prevBids[auction.id];
+      if (prev && auction.highestBidder !== S.username && prev.hb === S.username && auction.highestBidder !== prev.hb) {
+        notify("被加價了！", auction.itemName + " 被 " + auction.highestBidder + " 出價 " + fmtP(auction.currentPrice));
+      }
+      S.prevBids[auction.id] = { hb: auction.highestBidder, cp: auction.currentPrice };
+    });
+    S.auctions = a;
+  }
+  const m = await apiGet("market");
+  if (!m.error && Array.isArray(m)) S.market = m;
+  render();
+}
+
+// ── Actions ──
+function setApiUrl(url) { S.apiUrl = url; localStorage.setItem("auc_api", url); startPoll(); render(); }
+function setUser(name) { S.username = name; localStorage.setItem("auc_user", name); reqNotify(); startPoll(); render(); }
+function logout() { S.username = ""; localStorage.removeItem("auc_user"); stopPoll(); render(); }
+function resetApi() { S.apiUrl = ""; localStorage.removeItem("auc_api"); stopPoll(); render(); }
+function goList() { S.view = "list"; S.detail = null; render(); }
+
+async function loadDetail(id) {
+  S.selectedId = id; S.view = "detail"; S.loading = true; S.detail = null; render();
+  const d = await apiGet("detail", { id });
+  S.detail = d.error ? null : d; S.loading = false; render();
+}
+
+async function createAuction(e) {
+  e.preventDefault();
+  const name = $("ca-name").value.trim(), price = parseInt($("ca-price").value) || 0;
+  const inc = parseInt($("ca-inc").value) || 100, dur = parseInt($("ca-dur").value) || 30;
+  const unit = $("ca-unit").value;
+  let ms = dur; if (unit === "min") ms *= 60000; else if (unit === "hr") ms *= 3600000; else ms *= 86400000;
+  $("ca-submit").disabled = true; $("ca-submit").textContent = "建立中...";
+  const r = await apiPost({ action: "createAuction", itemName: name, creator: S.username, startPrice: price, increment: inc, duration: ms });
+  if (!r.error) { showMsg("✅ 競標已建立"); goList(); poll(); }
+  else { showMsg("❌ " + r.error); $("ca-submit").disabled = false; $("ca-submit").textContent = "🔨 發起競標"; }
+}
+
+async function placeBid(amount) {
+  if (!S.detail) return;
+  const r = await apiPost({ action: "bid", auctionId: S.detail.id, bidder: S.username, amount });
+  if (!r.error) { showMsg("✅ 出價成功！"); loadDetail(S.detail.id); }
+  else showMsg("❌ " + r.error);
+}
+
+async function deleteAuction() {
+  if (!confirm("確定刪除此競標？")) return;
+  await apiPost({ action: "deleteAuction", id: S.detail.id, creator: S.username });
+  showMsg("✅ 已刪除"); goList(); poll();
+}
+
+async function createMarketPost(e) {
+  e.preventDefault();
+  const type = document.querySelector('input[name="mtype"]:checked').value;
+  const name = $("cm-name").value.trim(), price = parseInt($("cm-price").value) || 0, note = $("cm-note").value.trim();
+  $("cm-submit").disabled = true; $("cm-submit").textContent = "發佈中...";
+  const r = await apiPost({ action: "createMarket", type, itemName: name, price, poster: S.username, note });
+  if (!r.error) { showMsg("✅ 已發佈"); S.view = "list"; poll(); }
+  else { showMsg("❌ " + r.error); $("cm-submit").disabled = false; $("cm-submit").textContent = "📋 發佈"; }
+}
+
+async function closeMarket(id) {
+  if (!confirm("確定下架？")) return;
+  const r = await apiPost({ action: "closeMarket", id, poster: S.username });
+  if (!r.error) { showMsg("✅ 已下架"); poll(); } else showMsg("❌ " + r.error);
+}
+
+// ── Render ──
+function render() {
+  const app = $("app");
+  if (!S.apiUrl) { app.innerHTML = renderSetup(); return; }
+  if (!S.username) { app.innerHTML = renderLogin(); return; }
+
+  let h = '';
+  // header
+  h += '<div class="header"><span class="header-title" onclick="goList()">⚔️ 寶物競標所</span><div style="display:flex;align-items:center;gap:10px"><span style="color:var(--dim);font-size:12px">👤 ' + esc(S.username) + '</span><button class="small-btn" onclick="logout()">登出</button><button class="small-btn" onclick="resetApi()">⚙️</button></div></div>';
+
+  // tabs
+  if (S.view === "list") {
+    h += '<div class="tabs"><button class="tab-btn ' + (S.tab === "auction" ? "active" : "") + '" onclick="S.tab=\'auction\';render()">⚔️ 競標</button><button class="tab-btn ' + (S.tab === "market" ? "active" : "") + '" onclick="S.tab=\'market\';render()">🏪 交易所</button></div>';
+  }
+
+  // toast
+  if (S.msg) h += '<div class="toast">' + esc(S.msg) + '</div>';
+
+  h += '<div class="container">';
+  if (S.tab === "auction") {
+    if (S.view === "list") h += renderAuctionList();
+    else if (S.view === "create") h += renderCreateAuction();
+    else if (S.view === "detail") h += renderDetail();
+  } else {
+    if (S.view === "list") h += renderMarketList();
+    else if (S.view === "createMarket") h += renderCreateMarket();
+  }
+  h += '</div>';
+  app.innerHTML = h;
+}
+
+function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+
+function renderSetup() {
+  return '<div class="center-box"><div class="center-card"><div style="font-size:36px;margin-bottom:8px">⚔️</div><h1 style="color:var(--gold);font-size:20px;margin-bottom:6px;letter-spacing:2px">寶物競標系統</h1><p style="color:var(--dim);font-size:12px;margin-bottom:24px">請先設定 Google Apps Script 部署網址</p><input id="setup-url" placeholder="https://script.google.com/macros/s/..." style="margin-bottom:12px"><button class="btn btn-gold" style="width:100%" onclick="var u=document.getElementById(\'setup-url\').value.trim();if(u)setApiUrl(u)">連線</button><p style="color:var(--dim);font-size:11px;margin-top:16px;line-height:1.6">將 Apps Script 部署為網頁應用程式後<br>把網址貼到上方即可</p></div></div>';
+}
+
+function renderLogin() {
+  return '<div class="center-box"><div class="center-card"><div style="font-size:36px;margin-bottom:8px">⚔️</div><h1 style="color:var(--gold);font-size:20px;margin-bottom:24px;letter-spacing:2px">輸入角色名稱</h1><input id="login-name" placeholder="你的角色名" style="margin-bottom:12px" onkeydown="if(event.key===\'Enter\'){var n=this.value.trim();if(n)setUser(n)}"><button class="btn btn-gold" style="width:100%" onclick="var n=document.getElementById(\'login-name\').value.trim();if(n)setUser(n)">進入競標所</button></div></div>';
+}
+
+function renderAuctionList() {
+  const now = Date.now();
+  const active = S.auctions.filter(a => now < a.endTime).sort((a, b) => a.endTime - b.endTime);
+  const ended = S.auctions.filter(a => now >= a.endTime).sort((a, b) => b.endTime - a.endTime);
+  let h = '<div style="display:flex;justify-content:space-between;align-items:center;margin:4px 0 16px"><span style="color:var(--gold);font-weight:700;font-size:16px">競標列表</span><button class="btn btn-gold" onclick="S.view=\'create\';render()">＋ 發起競標</button></div>';
+  if (S.auctions.length === 0) h += '<div style="text-align:center;color:var(--dim);padding:50px 0;font-size:13px"><div style="font-size:36px;margin-bottom:10px">🏺</div>目前沒有競標</div>';
+  if (active.length > 0) {
+    h += '<div style="color:var(--green);font-size:11px;font-weight:700;margin-bottom:8px">🟢 進行中 (' + active.length + ')</div>';
+    active.forEach(a => { h += renderACard(a, now); });
+  }
+  if (ended.length > 0) {
+    h += '<div style="color:var(--dim);font-size:11px;font-weight:700;margin:16px 0 8px">⚫ 已結標 (' + ended.length + ')</div>';
+    ended.forEach(a => { h += renderACard(a, now, true); });
+  }
+  return h;
+}
+
+function renderACard(a, now, ended) {
+  const rem = a.endTime - now, urgent = rem > 0 && rem < 300000;
+  return '<div class="auction-card' + (urgent ? ' urgent' : '') + (ended ? ' ended' : '') + '" onclick="loadDetail(\'' + a.id + '\')"><div><div style="font-weight:700;font-size:14px;color:' + (ended ? 'var(--dim)' : 'var(--text)') + '">' + esc(a.itemName) + '</div><div style="font-size:11px;color:var(--dim);margin-top:3px">by ' + esc(a.creator) + (a.highestBidder ? ' ｜ 👑 ' + esc(a.highestBidder) : '') + '</div></div><div style="text-align:right"><div style="color:var(--gold);font-weight:700;font-size:15px">💰 ' + fmtP(a.currentPrice) + '</div><div style="font-size:11px;color:' + (urgent ? 'var(--red)' : ended ? 'var(--dim)' : 'var(--green)') + ';margin-top:3px;font-weight:' + (urgent ? '700' : '400') + '">' + fmtT(rem) + '</div></div></div>';
+}
+
+function renderCreateAuction() {
+  return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:20px"><button class="back-btn" onclick="goList()">←</button><span style="color:var(--gold);font-weight:700;font-size:16px">發起競標</span></div><div class="card" style="padding:20px"><div style="margin-bottom:14px"><label class="label">物品名稱</label><input id="ca-name" placeholder="例：祝福強化卷軸"></div><div class="grid-2" style="margin-bottom:14px"><div><label class="label">底價</label><input id="ca-price" type="number" placeholder="0"></div><div><label class="label">每口加價</label><input id="ca-inc" type="number" placeholder="100"></div></div><label class="label">競標時限</label><div style="display:flex;gap:8px;margin-bottom:20px"><input id="ca-dur" type="number" value="30" style="flex:1"><select id="ca-unit" style="flex:0 0 80px;cursor:pointer"><option value="min">分鐘</option><option value="hr">小時</option><option value="day">天</option></select></div><button id="ca-submit" class="btn btn-gold" style="width:100%" onclick="createAuction(event)">🔨 發起競標</button></div>';
+}
+
+function renderDetail() {
+  if (S.loading) return '<div style="text-align:center;padding:40px;color:var(--dim)">載入中...</div>';
+  if (!S.detail) return '<div style="text-align:center;padding:40px;color:var(--dim)">找不到競標</div>';
+  const a = S.detail, now = Date.now(), rem = a.endTime - now, ended = rem <= 0, urgent = !ended && rem < 300000;
+  const hasBids = a.bids && a.bids.length > 0;
+  const nextBid = hasBids ? a.currentPrice + a.increment : a.startPrice;
+  const bids = a.bids ? [...a.bids].reverse() : [];
+
+  let h = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px"><button class="back-btn" onclick="goList()">←</button><span style="color:var(--gold);font-weight:700;font-size:16px;flex:1">' + esc(a.itemName) + '</span>';
+  if (a.creator === S.username) h += '<button class="del-btn" onclick="deleteAuction()">刪除</button>';
+  h += '<button class="small-btn" onclick="loadDetail(\'' + a.id + '\')">🔄</button></div>';
+
+  // status
+  h += '<div class="card" style="text-align:center;margin-bottom:12px;border-color:' + (ended ? 'var(--border)' : urgent ? 'var(--red)' : 'var(--gold)') + '"><div style="font-size:11px;color:var(--dim);margin-bottom:6px">目前最高出價</div><div style="font-size:28px;font-weight:700;color:var(--gold)">💰 ' + fmtP(a.currentPrice) + '</div>';
+  if (a.highestBidder) h += '<div style="font-size:13px;margin-top:4px">👑 ' + esc(a.highestBidder) + '</div>';
+  h += '<div class="status-badge" style="background:' + (ended ? 'var(--border)' : (urgent ? 'rgba(192,57,43,.13)' : 'rgba(39,174,96,.13)')) + ';color:' + (ended ? 'var(--dim)' : urgent ? 'var(--red)' : 'var(--green)') + '">⏱ ' + fmtT(rem) + '</div></div>';
+
+  // info
+  h += '<div class="card grid-3" style="padding:12px 16px;margin-bottom:12px"><div><span style="color:var(--dim)">發起者</span><div style="margin-top:3px">' + esc(a.creator) + '</div></div><div><span style="color:var(--dim)">底價</span><div style="margin-top:3px">' + fmtP(a.startPrice) + '</div></div><div><span style="color:var(--dim)">每口</span><div style="margin-top:3px">+' + fmtP(a.increment) + '</div></div></div>';
+
+  // bid controls
+  if (!ended) {
+    h += '<div class="card" style="margin-bottom:12px"><div style="font-size:11px;color:var(--dim);margin-bottom:8px">出價（最低 ' + fmtP(nextBid) + '）</div><div style="display:flex;gap:8px;margin-bottom:8px"><button class="btn btn-gold" style="flex:1" onclick="placeBid(' + nextBid + ')">' + fmtP(nextBid) + '</button><button class="btn btn-dim" style="flex:1" onclick="placeBid(' + (nextBid + a.increment) + ')">+2口 ' + fmtP(nextBid + a.increment) + '</button></div><div style="display:flex;gap:8px"><input id="custom-bid" type="number" placeholder="自訂金額" style="flex:1"><button class="btn btn-green" onclick="var v=parseInt(document.getElementById(\'custom-bid\').value);if(v>=' + nextBid + ')placeBid(v);else alert(\'最低出價 ' + fmtP(nextBid) + '\')">出價</button></div></div>';
+  }
+
+  // winner
+  if (ended && a.highestBidder) {
+    h += '<div class="card" style="border-color:var(--gold);background:rgba(212,168,67,.07);text-align:center;margin-bottom:12px"><div style="font-size:22px;margin-bottom:4px">🏆</div><div style="color:var(--gold);font-weight:700;font-size:14px">得標者：' + esc(a.highestBidder) + '</div><div style="font-size:12px;margin-top:3px">得標金額：' + fmtP(a.currentPrice) + '</div></div>';
+  } else if (ended) {
+    h += '<div class="card" style="text-align:center;margin-bottom:12px;color:var(--dim);font-size:13px">流標 — 無人出價</div>';
+  }
+
+  // bids
+  h += '<div class="card"><div style="font-size:12px;color:var(--dim);margin-bottom:10px;font-weight:600">出價紀錄 (' + bids.length + ')</div>';
+  if (bids.length === 0) h += '<div style="color:var(--dim);font-size:12px;text-align:center;padding:10px 0">尚無出價</div>';
+  bids.forEach((b, i) => {
+    h += '<div class="bid-row"><span>' + (i === 0 ? '👑 ' : '') + '<span style="color:' + (i === 0 ? 'var(--gold)' : 'var(--text)') + '">' + esc(b.bidder) + '</span></span><div style="display:flex;gap:10px;align-items:center"><span style="color:var(--gold);font-weight:600">' + fmtP(b.amount) + '</span><span style="color:var(--dim);font-size:10px">' + new Date(b.time).toLocaleTimeString("zh-TW") + '</span></div></div>';
+  });
+  h += '</div>';
+  return h;
+}
+
+// ── Market ──
+let marketTab = "buy";
+
+function renderMarketList() {
+  const buys = S.market.filter(i => i.type === "buy");
+  const sells = S.market.filter(i => i.type === "sell");
+  const list = marketTab === "buy" ? buys : sells;
+
+  let h = '<div style="display:flex;justify-content:space-between;align-items:center;margin:4px 0 12px"><span style="color:var(--gold);font-weight:700;font-size:16px">交易所</span><button class="btn btn-gold" onclick="S.view=\'createMarket\';render()">＋ 發佈</button></div>';
+
+  h += '<div style="display:flex;gap:8px;margin-bottom:14px">';
+  h += '<button style="flex:1;padding:8px 0;background:' + (marketTab === "buy" ? "rgba(39,174,96,.13)" : "var(--card)") + ';border:1px solid ' + (marketTab === "buy" ? "var(--green)" : "var(--border)") + ';border-radius:6px;color:' + (marketTab === "buy" ? "var(--green)" : "var(--dim)") + ';font-size:13px;font-weight:600;cursor:pointer" onclick="marketTab=\'buy\';render()">🟢 想收 (' + buys.length + ')</button>';
+  h += '<button style="flex:1;padding:8px 0;background:' + (marketTab === "sell" ? "rgba(192,57,43,.13)" : "var(--card)") + ';border:1px solid ' + (marketTab === "sell" ? "var(--red)" : "var(--border)") + ';border-radius:6px;color:' + (marketTab === "sell" ? "var(--red)" : "var(--dim)") + ';font-size:13px;font-weight:600;cursor:pointer" onclick="marketTab=\'sell\';render()">🔴 想賣 (' + sells.length + ')</button>';
+  h += '</div>';
+
+  if (list.length === 0) h += '<div style="text-align:center;color:var(--dim);padding:40px 0;font-size:13px">目前沒有' + (marketTab === "buy" ? "收購" : "出售") + '項目</div>';
+
+  list.forEach(item => {
+    const isBuy = item.type === "buy";
+    h += '<div class="market-card"><div class="flex-between"><div><div style="font-weight:700;font-size:14px"><span style="color:' + (isBuy ? 'var(--green)' : 'var(--red)') + ';margin-right:6px">' + (isBuy ? '收' : '賣') + '</span>' + esc(item.itemName) + '</div><div style="font-size:11px;color:var(--dim);margin-top:3px">by ' + esc(item.poster) + ' ｜ ' + new Date(item.createdAt).toLocaleDateString("zh-TW") + '</div>';
+    if (item.note) h += '<div style="font-size:12px;color:var(--text);margin-top:5px;opacity:.8">' + esc(item.note) + '</div>';
+    h += '</div><div style="text-align:right"><div style="color:var(--gold);font-weight:700;font-size:15px">💰 ' + fmtP(item.price) + '</div>';
+    if (item.poster === S.username) h += '<button class="del-btn" style="margin-top:6px;font-size:10px;padding:2px 8px" onclick="event.stopPropagation();closeMarket(\'' + item.id + '\')">下架</button>';
+    h += '</div></div></div>';
+  });
+  return h;
+}
+
+function renderCreateMarket() {
+  return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:20px"><button class="back-btn" onclick="S.view=\'list\';render()">←</button><span style="color:var(--gold);font-weight:700;font-size:16px">發佈交易</span></div><div class="card" style="padding:20px"><label class="label">類型</label><div style="display:flex;gap:8px;margin-bottom:14px"><label style="flex:1;padding:8px 0;background:rgba(39,174,96,.13);border:1px solid var(--green);border-radius:6px;color:var(--green);font-size:13px;font-weight:600;cursor:pointer;text-align:center"><input type="radio" name="mtype" value="buy" checked style="display:none">🟢 我想收</label><label style="flex:1;padding:8px 0;background:var(--input);border:1px solid var(--border);border-radius:6px;color:var(--dim);font-size:13px;font-weight:600;cursor:pointer;text-align:center"><input type="radio" name="mtype" value="sell" style="display:none">🔴 我想賣</label></div><label class="label">物品名稱</label><input id="cm-name" placeholder="例：紅色騎士斗篷" style="margin-bottom:14px"><label class="label">價格</label><input id="cm-price" type="number" placeholder="0" style="margin-bottom:14px"><label class="label">備註（選填）</label><input id="cm-note" placeholder="例：+9 以上才收" style="margin-bottom:20px"><button id="cm-submit" class="btn btn-gold" style="width:100%" onclick="createMarketPost(event)">📋 發佈</button></div>';
+}
+
+// ── Init ──
+render();
+if (S.apiUrl && S.username) startPoll();
+</script>
+</body>
+</html>
