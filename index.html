@@ -54,7 +54,7 @@ input:focus{border-color:var(--gold)}
 const API_URL = "https://script.google.com/macros/s/AKfycbyZ9QwWgosD5yMnc_dWjrdRY_V98mE3Xl5TwxpfodNRvV5Eoi9HPWiw_0Qcy08syr3JHw/exec";
 const S = {
   apiUrl: API_URL,
-  username: localStorage.getItem("auc_user") || "",
+  username: new URLSearchParams(location.search).get("u") || localStorage.getItem("auc_user") || "",
   tab: "auction",
   view: "list",
   auctions: [],
@@ -129,8 +129,17 @@ async function poll() {
 }
 
 // ── Actions ──
-function setUser(name) { S.username = name; localStorage.setItem("auc_user", name); reqNotify(); startPoll(); render(); }
-function logout() { S.username = ""; localStorage.removeItem("auc_user"); stopPoll(); render(); }
+function setUser(name) {
+  S.username = name;
+  localStorage.setItem("auc_user", name);
+  const url = new URL(location); url.searchParams.set("u", name); history.replaceState(null, "", url);
+  reqNotify(); startPoll(); render();
+}
+function logout() {
+  S.username = ""; localStorage.removeItem("auc_user");
+  const url = new URL(location); url.searchParams.delete("u"); history.replaceState(null, "", url);
+  stopPoll(); render();
+}
 function goList() { S.view = "list"; S.detail = null; render(); }
 
 async function loadDetail(id) {
